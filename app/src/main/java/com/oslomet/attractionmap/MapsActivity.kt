@@ -32,7 +32,7 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
      * Manipulates the map once available.
      * This callback is triggered when the map is ready to be used.
      * This is where we can add markers or lines, add listeners or move the camera. In this case,
-     * we just add a marker near Sydney, Australia.
+     * we just add a marker at OsloMet
      * If Google Play services is not installed on the device, the user will be prompted to install
      * it inside the SupportMapFragment. This method will only be triggered once the user has
      * installed Google Play services and returned to the app.
@@ -44,5 +44,12 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
         val oslomet = LatLng(59.91958244312204, 10.735418584314667)
         mMap.addMarker(MarkerOptions().position(oslomet).title("Oslomet marker"))
         mMap.moveCamera(CameraUpdateFactory.newLatLng(oslomet))
+
+
+
+        // Move to method called on php response so all markers are loaded first
+        mMap.setOnMapClickListener { latLng: LatLng ->
+            mMap.addMarker(MarkerOptions().position(latLng).title("New marker"))
+        }
     }
 }
