@@ -3,6 +3,7 @@ package com.oslomet.attractionmap
 import android.content.DialogInterface
 import android.location.Address
 import android.location.Geocoder
+import android.os.AsyncTask
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.os.NetworkOnMainThreadException
@@ -20,14 +21,24 @@ import com.google.android.gms.maps.SupportMapFragment
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.MarkerOptions
 import com.oslomet.attractionmap.databinding.ActivityMapsBinding
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.selects.whileSelect
+import org.json.JSONArray
+import java.io.BufferedReader
 import java.io.IOException
+import java.io.InputStreamReader
 import java.lang.RuntimeException
+import java.net.HttpURLConnection
+import java.net.URL
 import java.util.*
 
 class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
     private lateinit var mMap: GoogleMap
     private lateinit var binding: ActivityMapsBinding
     private lateinit var geocoder: Geocoder
+    private var attractions = arrayListOf<Attraction>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -53,14 +64,28 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
      * installed Google Play services and returned to the app.
      */
     override fun onMapReady(googleMap: GoogleMap) {
+        val task = FetchAttractions()
+        task.execute("http://data1500.cs.oslomet.no/~s354366/")
+        GlobalScope.launch(context = Dispatchers.Main) {
+            println("COROUTINE ================ GET")
+            val res = task?.get()
+            if (res != null) {
+                println("COR attractions: $res")
+                attractions = res
+            } else {
+                println("COR failed, returned null")
+            }
+        }
+
         mMap = googleMap
 
-        // Add a marker in Sydney and move the camera
         val oslomet = LatLng(59.91958244312204, 10.735418584314667)
-        mMap.addMarker(MarkerOptions().position(oslomet).title("Oslomet marker"))
         mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(oslomet, 15.0f))
 
 
+
+
+        // INSERT INTO attractions (title, description, address, latitude, longitude) VALUES ('colluseum', 'a big sphere in which people fight', 'oslo 6787', 34.123443, -12.789834); '
 
         // Move to method called on php response so all markers are loaded first
         mMap.setOnMapClickListener { latLng: LatLng ->
@@ -119,4 +144,53 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
             }
         }
     }
+
+    class FetchAttractions() : AsyncTask<String, Void, ArrayList<Attraction>?>() {
+        private val attractions = arrayListOf<Attraction>()
+        
+        override fun doInBackground(vararg paths: String?): ArrayList<Attraction>? {
+            for (path in paths) {
+                val url = URL(path)
+                val con = url.openConnection() as HttpURLConnection
+                con.requestMethod = "GET"
+                con.setRequestProperty("Accept", "application/json")
+                if (con.responseCode != 200) {
+                    println("Connection failed ($path)")
+                    return null
+                }
+
+                var data = ""
+                val reader = BufferedReader(InputStreamReader(con.inputStream))
+                println("server output:")
+                reader.forEachLine {
+                    data += it
+                }
+                println(data)
+
+                val array = JSONArray(data)
+                for (i in 0 until array.length()) {
+                    val json = array.getJSONObject(i)
+                    val attraction = Attraction(
+                        json.getString("title"),
+                        json.getString("description"),
+                        json.getString("address"),
+                        LatLng(
+                            json.getDouble("latitude"),
+                            json.getDouble("longitude")
+                        )
+                    )
+                    attractions.add(attraction)
+                }
+            }
+
+            return attractions
+        }
+    }
 }
+
+data class Attraction (
+    val title: String,
+    val description: String,
+    val address: String,
+    val latLng: LatLng,
+)
