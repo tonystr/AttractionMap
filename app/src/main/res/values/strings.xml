@@ -2,4 +2,6 @@
     <string name="app_name">AttractionMap</string>
     <string name="title_activity_maps">MapsActivity</string>
     <string name="project_name">AttractionMap</string>
+    <string name="name">Name</string>
+    <string name="description">Description</string>
 </resources>

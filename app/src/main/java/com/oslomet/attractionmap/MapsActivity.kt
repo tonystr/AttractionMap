@@ -3,16 +3,12 @@ package com.oslomet.attractionmap
 import android.content.DialogInterface
 import android.location.Address
 import android.location.Geocoder
-import android.os.AsyncTask
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
-import android.os.NetworkOnMainThreadException
-import android.util.Log
 import android.view.Gravity
 import android.widget.EditText
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
-import androidx.core.view.setPadding
 
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
@@ -21,17 +17,7 @@ import com.google.android.gms.maps.SupportMapFragment
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.MarkerOptions
 import com.oslomet.attractionmap.databinding.ActivityMapsBinding
-import kotlinx.coroutines.DelicateCoroutinesApi
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.selects.whileSelect
 import org.json.JSONArray
-import java.io.BufferedReader
-import java.io.IOException
-import java.io.InputStreamReader
-import java.lang.RuntimeException
-import java.net.HttpURLConnection
 import java.net.URL
 import java.util.*
 import kotlin.concurrent.thread
@@ -85,51 +71,78 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
             }
 
             if (addresses != null) {
-                val address = addresses[0]
-                val shortName = address.getAddressLine(0)
+                val address = addresses[0].getAddressLine(0)
 
                 // Move camera and create marker
                 mMap.animateCamera(CameraUpdateFactory.newLatLng(latLng))
-                val marker = mMap.addMarker(MarkerOptions().position(latLng).title(shortName))
+                val marker = mMap.addMarker(MarkerOptions().position(latLng).title(address))
 
                 // Stringify latitude and longitude
                 val lat = "%.6f".format(latLng.latitude)
                 val lng = "%.6f".format(latLng.longitude)
 
                 // Create popup alert dialog for registering attraction
-                val alert = AlertDialog.Builder(this)
-                    .setTitle("Register attraction here?")
-                    .setMessage("$shortName\n(${lat}, ${lng})")
-                    .create()
+                with (AlertDialog.Builder(this).create()) {
+                    setMessage("$address\n(${lat}, ${lng})")
+                    setTitle("Register attraction here?")
 
-                // Set textinput for describing the attraction
-                val input = EditText(this)
-                input.hint = "Describe the attraction"
-                alert.setView(input)
+                    val alertView = layoutInflater.inflate(R.layout.attraction_dialog, null)
+                    setView(alertView)
 
-                // OK button - register attraction here
-                // TODO: Handle empty strings
-                alert.setButton(DialogInterface.BUTTON_POSITIVE, "Ok") { _, _ ->
-                    val title = input.text.toString();
-                    marker.title = title
-                    Toast.makeText(this, "Added marker $title", Toast.LENGTH_SHORT).show()
+                    // OK button - register attraction here
+                    // TODO: Handle empty strings
+                    setButton(DialogInterface.BUTTON_POSITIVE, "Ok") { _, _ ->
+                        // Retrieve data from text inputs
+                        val title = alertView.findViewById<EditText>(R.id.input_title).text.toString();
+                        val desc = alertView.findViewById<EditText>(R.id.input_desc).text.toString();
+
+                        val attraction = Attraction(title, desc, address, latLng)
+                        createAttraction(attraction)
+
+                        marker?.title = title
+                        Toast.makeText(context, "Added marker $title", Toast.LENGTH_SHORT).show()
+                    }
+
+                    // CANCEL button - do not register attraction
+                    setButton(DialogInterface.BUTTON_NEGATIVE, "Cancel") { _, _ ->
+                        marker?.remove()
+                    }
+
+                    // Click outside dialog
+                    setOnCancelListener {
+                        marker?.remove()
+                    }
+
+                    // Align alertdialog to bottom so marker can be seen while editing
+                    window?.setGravity(Gravity.BOTTOM)
+                    show()
                 }
-
-                // CANCEL button - do not register attraction
-                alert.setButton(DialogInterface.BUTTON_NEGATIVE, "Cancel") { _, _ ->
-                    marker.remove()
-                }
-
-                // Click outside dialog
-                alert.setOnCancelListener{
-                    marker.remove()
-                }
-
-                // Align alertdialog to bottom so marker can be seen while editing
-                alert.window?.setGravity(Gravity.BOTTOM)
-                alert.show()
             } else {
                 Toast.makeText(this, "Invalid address", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun createAttraction(attraction: Attraction) {
+        val title = attraction.title
+        val desc = attraction.description
+        val address = attraction.address
+        val latitude = attraction.latLng.latitude
+        val longitude = attraction.latLng.longitude
+        val path = "http://data1500.cs.oslomet.no/~s354366/createAttraction.php" +
+                "?title=$title" +
+                "&description=$desc" +
+                "&address=$address" +
+                "&latitude=$latitude" +
+                "&longitude=$longitude"
+
+        // Run on a different thread to not block the UI
+        thread {
+            // Send http request
+            val res = try {
+                URL(path).readText()
+            } catch (e: Exception) {
+                return@thread
             }
         }
     }
@@ -167,7 +180,7 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
 
                     // Add attraction marker to map
                     mMap.addMarker(MarkerOptions().position(latLng).title(attraction.title))
-                    mMap.animateCamera(CameraUpdateFactory.newLatLng(latLng))
+                    mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(latLng, 15.0f))
                 }
 
                 // Set up map functionality
