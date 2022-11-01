@@ -58,18 +58,16 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
         // Add a marker in Sydney and move the camera
         val oslomet = LatLng(59.91958244312204, 10.735418584314667)
         mMap.addMarker(MarkerOptions().position(oslomet).title("Oslomet marker"))
-        mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(oslomet, 14.0f))
+        mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(oslomet, 15.0f))
 
 
 
         // Move to method called on php response so all markers are loaded first
         mMap.setOnMapClickListener { latLng: LatLng ->
-            var addresses: List<Address>? = null
-
-            try {
-                addresses = geocoder.getFromLocation(latLng.latitude, latLng.longitude, 1)
+            val addresses: List<Address>? = try {
+                geocoder.getFromLocation(latLng.latitude, latLng.longitude, 1)
             } catch (e: Exception) {
-                Toast.makeText(this, "Invalid address", Toast.LENGTH_SHORT).show()
+                null
             }
 
             if (addresses != null) {
@@ -80,15 +78,19 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
                 mMap.animateCamera(CameraUpdateFactory.newLatLng(latLng))
                 val marker = mMap.addMarker(MarkerOptions().position(latLng).title(shortName))
 
+                // Stringify latitude and longitude
+                val lat = "%.6f".format(latLng.latitude)
+                val lng = "%.6f".format(latLng.longitude)
+
                 // Create popup alert dialog for registering attraction
                 val alert = AlertDialog.Builder(this)
                     .setTitle("Register attraction here?")
-                    .setMessage(shortName)
+                    .setMessage("$shortName\n(${lat}, ${lng})")
                     .create()
 
-                // Set textinput for naming the attraction
+                // Set textinput for describing the attraction
                 val input = EditText(this)
-                input.hint = "Name of attraction"
+                input.hint = "Describe the attraction"
                 alert.setView(input)
 
                 // OK button - register attraction here
@@ -101,6 +103,11 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
 
                 // CANCEL button - do not register attraction
                 alert.setButton(DialogInterface.BUTTON_NEGATIVE, "Cancel") { _, _ ->
+                    marker.remove()
+                }
+
+                // Click outside dialog
+                alert.setOnCancelListener{
                     marker.remove()
                 }
 
