@@ -21,6 +21,7 @@ import com.google.android.gms.maps.SupportMapFragment
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.MarkerOptions
 import com.oslomet.attractionmap.databinding.ActivityMapsBinding
+import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
@@ -33,6 +34,7 @@ import java.lang.RuntimeException
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.*
+import kotlin.concurrent.thread
 
 class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
     private lateinit var mMap: GoogleMap
@@ -64,31 +66,18 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
      * installed Google Play services and returned to the app.
      */
     override fun onMapReady(googleMap: GoogleMap) {
-        val task = FetchAttractions()
-        task.execute("http://data1500.cs.oslomet.no/~s354366/")
-        GlobalScope.launch(context = Dispatchers.Main) {
-            println("COROUTINE ================ GET")
-            val res = task?.get()
-            if (res != null) {
-                println("COR attractions: $res")
-                attractions = res
-            } else {
-                println("COR failed, returned null")
-            }
-        }
-
         mMap = googleMap
 
-        val oslomet = LatLng(59.91958244312204, 10.735418584314667)
-        mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(oslomet, 15.0f))
-
-
-
+        // Fetches existing markers from server and populates map with them
+        // This calls onReady() once it's done
+        fetchAttractions()
 
         // INSERT INTO attractions (title, description, address, latitude, longitude) VALUES ('colluseum', 'a big sphere in which people fight', 'oslo 6787', 34.123443, -12.789834); '
+    }
 
-        // Move to method called on php response so all markers are loaded first
+    private fun onReady() {
         mMap.setOnMapClickListener { latLng: LatLng ->
+            // Find address for given location if it exists, null if not
             val addresses: List<Address>? = try {
                 geocoder.getFromLocation(latLng.latitude, latLng.longitude, 1)
             } catch (e: Exception) {
@@ -98,8 +87,8 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
             if (addresses != null) {
                 val address = addresses[0]
                 val shortName = address.getAddressLine(0)
-                println(address.toString())
 
+                // Move camera and create marker
                 mMap.animateCamera(CameraUpdateFactory.newLatLng(latLng))
                 val marker = mMap.addMarker(MarkerOptions().position(latLng).title(shortName))
 
@@ -145,45 +134,45 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
         }
     }
 
-    class FetchAttractions() : AsyncTask<String, Void, ArrayList<Attraction>?>() {
-        private val attractions = arrayListOf<Attraction>()
-        
-        override fun doInBackground(vararg paths: String?): ArrayList<Attraction>? {
-            for (path in paths) {
-                val url = URL(path)
-                val con = url.openConnection() as HttpURLConnection
-                con.requestMethod = "GET"
-                con.setRequestProperty("Accept", "application/json")
-                if (con.responseCode != 200) {
-                    println("Connection failed ($path)")
-                    return null
-                }
+    private fun fetchAttractions() {
+        val path = "http://data1500.cs.oslomet.no/~s354366/"
 
-                var data = ""
-                val reader = BufferedReader(InputStreamReader(con.inputStream))
-                println("server output:")
-                reader.forEachLine {
-                    data += it
-                }
-                println(data)
+        // Run on a different thread to not block the UI
+        thread {
+            // Send http request
+            val jsonRes = try {
+                URL(path).readText()
+            } catch (e: Exception) {
+                return@thread
+            }
 
-                val array = JSONArray(data)
+            // Back to UI thread
+            runOnUiThread {
+                // Loop over JSON array and retrieve objects
+                val array = JSONArray(jsonRes)
                 for (i in 0 until array.length()) {
                     val json = array.getJSONObject(i)
+                    val latLng = LatLng(
+                        json.getDouble("latitude"),
+                        json.getDouble("longitude")
+                    )
+                    // Create attraction object
                     val attraction = Attraction(
                         json.getString("title"),
                         json.getString("description"),
                         json.getString("address"),
-                        LatLng(
-                            json.getDouble("latitude"),
-                            json.getDouble("longitude")
-                        )
+                        latLng
                     )
                     attractions.add(attraction)
-                }
-            }
 
-            return attractions
+                    // Add attraction marker to map
+                    mMap.addMarker(MarkerOptions().position(latLng).title(attraction.title))
+                    mMap.animateCamera(CameraUpdateFactory.newLatLng(latLng))
+                }
+
+                // Set up map functionality
+                onReady()
+            }
         }
     }
 }
