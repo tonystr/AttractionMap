@@ -11,6 +11,7 @@ import android.view.Gravity
 import android.widget.EditText
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
+import androidx.core.view.setPadding
 
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMap
@@ -79,23 +80,33 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
                 mMap.animateCamera(CameraUpdateFactory.newLatLng(latLng))
                 val marker = mMap.addMarker(MarkerOptions().position(latLng).title(shortName))
 
+                // Create popup alert dialog for registering attraction
                 val alert = AlertDialog.Builder(this)
                     .setTitle("Register attraction here?")
                     .setMessage(shortName)
                     .create()
 
+                // Set textinput for naming the attraction
                 val input = EditText(this)
+                input.hint = "Name of attraction"
                 alert.setView(input)
+
+                // OK button - register attraction here
+                // TODO: Handle empty strings
                 alert.setButton(DialogInterface.BUTTON_POSITIVE, "Ok") { _, _ ->
                     val title = input.text.toString();
                     marker.title = title
                     Toast.makeText(this, "Added marker $title", Toast.LENGTH_SHORT).show()
                 }
 
+                // CANCEL button - do not register attraction
+                alert.setButton(DialogInterface.BUTTON_NEGATIVE, "Cancel") { _, _ ->
+                    marker.remove()
+                }
+
+                // Align alertdialog to bottom so marker can be seen while editing
                 alert.window?.setGravity(Gravity.BOTTOM)
                 alert.show()
-
-                // Toast.makeText(this, "Added marker at $shortName", Toast.LENGTH_SHORT).show()
             } else {
                 Toast.makeText(this, "Invalid address", Toast.LENGTH_SHORT).show()
             }
