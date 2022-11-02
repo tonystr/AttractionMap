@@ -1,5 +1,6 @@
 package com.oslomet.attractionmap
 
+import android.annotation.SuppressLint
 import android.content.DialogInterface
 import android.location.Address
 import android.location.Geocoder
@@ -27,6 +28,7 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
     private lateinit var binding: ActivityMapsBinding
     private lateinit var geocoder: Geocoder
     private var attractions = arrayListOf<Attraction>()
+    private val IDEAL_ZOOM = 15.0f
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -58,10 +60,13 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
         // This calls onReady() once it's done
         fetchAttractions()
 
-        // INSERT INTO attractions (title, description, address, latitude, longitude) VALUES ('colluseum', 'a big sphere in which people fight', 'oslo 6787', 34.123443, -12.789834); '
+        // INSERT INTO attractions (title, description, address, latitude, longitude) VALUES ('coliseum', 'a big sphere in which people fight', 'oslo 6787', 34.123443, -12.789834); '
     }
 
+    @SuppressLint("InflateParams") // https://stackoverflow.com/a/27662832/8715267
     private fun onReady() {
+
+        // Map click - create marker
         mMap.setOnMapClickListener { latLng: LatLng ->
             // Find address for given location if it exists, null if not
             val addresses: List<Address>? = try {
@@ -74,7 +79,7 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
                 val address = addresses[0].getAddressLine(0)
 
                 // Move camera and create marker
-                mMap.animateCamera(CameraUpdateFactory.newLatLng(latLng))
+                mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(latLng, IDEAL_ZOOM))
                 val marker = mMap.addMarker(MarkerOptions().position(latLng).title(address))
 
                 // Stringify latitude and longitude
@@ -93,8 +98,8 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
                     // TODO: Handle empty strings
                     setButton(DialogInterface.BUTTON_POSITIVE, "Ok") { _, _ ->
                         // Retrieve data from text inputs
-                        val title = alertView.findViewById<EditText>(R.id.input_title).text.toString();
-                        val desc = alertView.findViewById<EditText>(R.id.input_desc).text.toString();
+                        val title = alertView.findViewById<EditText>(R.id.input_title).text.toString()
+                        val desc = alertView.findViewById<EditText>(R.id.input_desc).text.toString()
 
                         val attraction = Attraction(title, desc, address, latLng)
                         createAttraction(attraction)
@@ -118,28 +123,112 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
                     show()
                 }
             } else {
+                // Notify about unknown location
                 Toast.makeText(this, "Invalid address", Toast.LENGTH_SHORT).show()
             }
+        }
+
+        // Marker click - edit marker
+        mMap.setOnMarkerClickListener {
+            // Find attraction for clicked marker
+            val attraction = attractions.find { a -> a.title == it.title }
+                // Cancel if attraction doesn't exist
+                ?: return@setOnMarkerClickListener true
+
+            // Move camera to marker
+            mMap.animateCamera(CameraUpdateFactory.newLatLng(attraction.latLng))
+
+            // Create popup dialog for editing or deleting marker
+            with (AlertDialog.Builder(this, R.style.AlertDialogEditAttraction).create()) {
+                // setMessage("${att.address}\n(${att.latLng.latitude}, ${att.latLng.longitude})")
+                setTitle("Edit attraction")
+
+                // Set custom view for alert dialog
+                val view = layoutInflater.inflate(R.layout.attraction_edit_dialog, null)
+                setView(view)
+
+                // Save references to all input fields
+                val inputName = view.findViewById<EditText>(R.id.input_title)
+                val inputDesc = view.findViewById<EditText>(R.id.input_desc)
+                val inputAddr = view.findViewById<EditText>(R.id.input_address)
+                val inputLat  = view.findViewById<EditText>(R.id.input_latitude)
+                val inputLong = view.findViewById<EditText>(R.id.input_longitude)
+
+                // Put existing data into input fields
+                inputName.setText(attraction.title)
+                inputDesc.setText(attraction.description)
+                inputAddr.setText(attraction.address)
+                inputLat.setText("%.6f".format(attraction.latLng.latitude))
+                inputLong.setText("%.6f".format(attraction.latLng.longitude))
+
+                // DELETE button - delete existing attraction
+                // TODO: IMPLEMENT THIS AND ON WEB SERVER
+                setButton(DialogInterface.BUTTON_NEGATIVE, "Delete") { _, _ ->
+                    // Remove attraction locally
+                    attractions.remove(attraction)
+                    it.remove()
+                }
+
+                // SAVE button - save changes to existing attraction
+                // TODO: IMPLEMENT ON WEB SERVER
+                setButton(DialogInterface.BUTTON_POSITIVE, "Save") { _, _ ->
+                    // Recreate attraction based on inputs
+                    val newAttr = Attraction(
+                        inputName.text.toString(),
+                        inputDesc.text.toString(),
+                        inputAddr.text.toString(),
+                        LatLng(
+                            inputLat.text.toString().toDouble(),
+                            inputLong.text.toString().toDouble(),
+                        )
+                    )
+
+                    // Replace old attraction with new
+                    attractions.remove(attraction)
+                    attractions.add(newAttr)
+
+                    // Move and rename existing marker
+                    it.title = newAttr.title
+                    it.position = newAttr.latLng
+                    mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(newAttr.latLng, IDEAL_ZOOM))
+                }
+
+                // Align alertdialog to bottom so marker can be seen while editing
+                window?.setGravity(Gravity.BOTTOM)
+                show()
+            }
+
+            true
         }
     }
 
     private fun createAttraction(attraction: Attraction) {
-        val title = attraction.title
-        val desc = attraction.description
-        val address = attraction.address
-        val latitude = attraction.latLng.latitude
-        val longitude = attraction.latLng.longitude
+        // Cancel if attraction name is taken
+        val att = attractions.find { a -> a.title == attraction.title }
+        if (att != null) {
+            Toast.makeText(
+                this,
+                "An attraction called ${attraction.title} already exists",
+                Toast.LENGTH_SHORT
+            ).show()
+            return
+        }
+
+        // Construct GET query url
         val path = "http://data1500.cs.oslomet.no/~s354366/createAttraction.php" +
-                "?title=$title" +
-                "&description=$desc" +
-                "&address=$address" +
-                "&latitude=$latitude" +
-                "&longitude=$longitude"
+                "?title=${attraction.title}" +
+                "&description=${attraction.description}" +
+                "&address=${attraction.address}" +
+                "&latitude=${attraction.latLng.latitude}" +
+                "&longitude=${attraction.latLng.longitude}"
+
+        // Update local list of attractions
+        attractions.add(attraction)
 
         // Run on a different thread to not block the UI
         thread {
             // Send http request
-            val res = try {
+            try {
                 URL(path).readText()
             } catch (e: Exception) {
                 return@thread
@@ -196,7 +285,7 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
 
                     // Add attraction marker to map
                     mMap.addMarker(MarkerOptions().position(latLng).title(attraction.title))
-                    mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(latLng, 15.0f))
+                    mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(latLng, IDEAL_ZOOM))
                 }
 
                 // Set up map functionality
