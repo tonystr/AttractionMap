@@ -167,6 +167,17 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
                     // Remove attraction locally
                     attractions.remove(attraction)
                     it.remove()
+
+                    val path = "http://data1500.cs.oslomet.no/~s354366/deleteAttraction.php?title=${it.title}"
+                    // Run on a different thread to not block the UI
+                    thread {
+                        // Send http request
+                        try {
+                            URL(path).readText()
+                        } catch (e: Exception) {
+                            return@thread
+                        }
+                    }
                 }
 
                 // SAVE button - save changes to existing attraction
@@ -182,6 +193,28 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
                             inputLong.text.toString().toDouble(),
                         )
                     )
+
+                    // Construct query based on new attraction values
+                    val path = "http://data1500.cs.oslomet.no/~s354366/updateAttraction.php?${
+                        arrayListOf(
+                            "old_title=${it.title}",
+                            "new_title=${newAttr.title}",
+                            "description=${newAttr.description}",
+                            "address=${newAttr.address}",
+                            "latitude=${newAttr.latLng.latitude}",
+                            "longitude=${newAttr.latLng.longitude}"
+                        ).joinToString("&")
+                    }"
+
+                    // Run on a different thread to not block the UI
+                    thread {
+                        // Send http request
+                        try {
+                            URL(path).readText()
+                        } catch (e: Exception) {
+                            return@thread
+                        }
+                    }
 
                     // Replace old attraction with new
                     attractions.remove(attraction)
