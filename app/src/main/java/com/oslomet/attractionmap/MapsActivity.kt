@@ -154,8 +154,24 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
         thread {
             // Send http request
             val jsonRes = try {
-                URL(path).readText()
+                val url = URL(path)
+                // Throw exception if connection times out
+                with (url.openConnection()) {
+                    connectTimeout = 2000
+                    readTimeout = 2000
+                    connect()
+                }
+                // Read response into jsonRes
+                url.readText()
             } catch (e: Exception) {
+                // Exception is thrown if not on same network as web server
+                runOnUiThread {
+                    Toast.makeText(
+                        this,
+                        "Failed to connect to database. You must be connected to EduVPN",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
                 return@thread
             }
 
