@@ -72,10 +72,13 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
             val addresses: List<Address>? = try {
                 geocoder.getFromLocation(latLng.latitude, latLng.longitude, 1)
             } catch (e: Exception) {
+                println(e.message)
                 null
             }
 
-            if (addresses != null) {
+            println(addresses)
+
+            if (!addresses.isNullOrEmpty()) {
                 val address = addresses[0].getAddressLine(0)
 
                 // Move camera and create marker
@@ -102,10 +105,15 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
                         val desc = alertView.findViewById<EditText>(R.id.input_desc).text.toString()
 
                         val attraction = Attraction(title, desc, address, latLng)
-                        createAttraction(attraction)
+                        val created = createAttraction(attraction)
 
-                        marker?.title = title
-                        Toast.makeText(context, "Added marker $title", Toast.LENGTH_SHORT).show()
+                        if (!created) {
+                            marker?.remove()
+                        } else {
+                            marker?.title = title
+                            Toast.makeText(context, "Added marker $title", Toast.LENGTH_SHORT)
+                                .show()
+                        }
                     }
 
                     // CANCEL button - do not register attraction
@@ -235,7 +243,7 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
         }
     }
 
-    private fun createAttraction(attraction: Attraction) {
+    private fun createAttraction(attraction: Attraction): Boolean {
         // Cancel if attraction name is taken
         val att = attractions.find { a -> a.title == attraction.title }
         if (att != null) {
@@ -244,7 +252,7 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
                 "An attraction called ${attraction.title} already exists",
                 Toast.LENGTH_SHORT
             ).show()
-            return
+            return false
         }
 
         // Construct GET query url
@@ -267,6 +275,8 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
                 return@thread
             }
         }
+
+        return true
     }
 
     private fun fetchAttractions() {
