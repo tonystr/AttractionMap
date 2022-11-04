@@ -44,15 +44,6 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
         mapFragment.getMapAsync(this)
     }
 
-    /**
-     * Manipulates the map once available.
-     * This callback is triggered when the map is ready to be used.
-     * This is where we can add markers or lines, add listeners or move the camera. In this case,
-     * we just add a marker at OsloMet
-     * If Google Play services is not installed on the device, the user will be prompted to install
-     * it inside the SupportMapFragment. This method will only be triggered once the user has
-     * installed Google Play services and returned to the app.
-     */
     override fun onMapReady(googleMap: GoogleMap) {
         mMap = googleMap
 
@@ -76,8 +67,6 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
                 null
             }
 
-            println(addresses)
-
             if (!addresses.isNullOrEmpty()) {
                 val address = addresses[0].getAddressLine(0)
 
@@ -91,8 +80,8 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback {
 
                 // Create popup alert dialog for registering attraction
                 with (AlertDialog.Builder(this).create()) {
-                    setMessage("$address\n(${lat}, ${lng})")
                     setTitle("Register attraction here?")
+                    setMessage("$address\n(${lat}, ${lng})")
 
                     val alertView = layoutInflater.inflate(R.layout.attraction_dialog, null)
                     setView(alertView)
